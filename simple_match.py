@@ -101,4 +101,20 @@ word_path = "example.docx"
 pdf_path = "example.pdf"
 output_path = "linked_example.docx"
 
+def link_word_to_pdf(word_path, pdf_path, output_path):
+    # Step 1: Extract data from Word
+    word_data = extract_word_text_and_positions(word_path)
+
+    # Step 2: Extract data from PDF
+    pdf_data = extract_pdf_text_and_positions(pdf_path)
+
+    # Step 3: Match words
+    matches = match_words(word_data, pdf_data)
+
+    # Step 4: Add hyperlinks to Word
+    add_hyperlink_to_word(word_path, matches, output_path)
+
+    print(f"Linked Word document saved to {output_path}")
+    
+
 link_word_to_pdf(word_path, pdf_path, output_path)

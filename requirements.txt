@@ -1,3 +1,4 @@
 python-docx
 pywin32
 PyMuPDF
+flask

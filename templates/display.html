@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Display Word and PDF</title>
+    <style>
+        .container {
+            display: flex;
+        }
+        .column {
+            flex: 50%;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Displaying Word and PDF Content</h1>
+    <div class="container">
+        <div class="column">
+            <h2>Word:</h2>
+            <p>{{ word }}</p>
+        </div>
+        <div class="column">
+            <h2>PDF Content:</h2>
+            <pre>{{ pdf_text }}</pre>
+        </div>
+    </div>
+</body>
+</html>

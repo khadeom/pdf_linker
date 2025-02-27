@@ -1,120 +1,98 @@
+import docx
 from docx import Document
-
-def extract_word_text_and_positions(word_path):
-    doc = Document(word_path)
-    word_data = []
-    for para_idx, paragraph in enumerate(doc.paragraphs):
-        for run in paragraph.runs:
-            word_data.append({
-                "text": run.text,
-                "paragraph": para_idx,
-                "offset": paragraph.text.find(run.text)
-            })
-    return word_data
-
-import fitz  # PyMuPDF
-
-def extract_pdf_text_and_positions(pdf_path):
-    pdf_doc = fitz.open(pdf_path)
-    pdf_data = []
-    for page_num in range(len(pdf_doc)):
-        page = pdf_doc.load_page(page_num)
-        words = page.get_text("words")  # Extract words with positions
-        for word in words:
-            pdf_data.append({
-                "text": word[4],  # The actual word text
-                "page": page_num,
-                "x": word[0],  # x-coordinate
-                "y": word[1]   # y-coordinate
-            })
-    return pdf_data
-
-def match_words(word_data, pdf_data):
-    matches = []
-    for word in word_data:
-        for pdf_word in pdf_data:
-            if word["text"] == pdf_word["text"]:  # Match by text
-                matches.append({
-                    "word_text": word["text"],
-                    "word_location": {
-                        "paragraph": word["paragraph"],
-                        "offset": word["offset"]
-                    },
-                    "pdf_location": {
-                        "page": pdf_word["page"],
-                        "x": pdf_word["x"],
-                        "y": pdf_word["y"]
-                    }
-                })
-                break  # Stop after the first match
-    return matches
-
-from docx import Document
+import PyPDF2
+import re
+import os
+from docx.shared import Pt
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
 
-def add_hyperlink_to_word(word_path, matches, output_path):
-    doc = Document(word_path)
-    for match in matches:
-        para_idx = match["word_location"]["paragraph"]
-        offset = match["word_location"]["offset"]
-        text = match["word_text"]
+def extract_pdf_text(pdf_path):
+    """Extract text from a PDF file."""
+    with open(pdf_path, 'rb') as file:
+        reader = PyPDF2.PdfReader(file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text()
+    return text
 
-        # Find the paragraph and run containing the word
-        paragraph = doc.paragraphs[para_idx]
-        for run in paragraph.runs:
-            if text in run.text:
-                # Add a hyperlink to the word
-                hyperlink = OxmlElement("w:hyperlink")
-                hyperlink.set(qn("r:id"), f"mismatch_{match['pdf_location']['page']}")
-                run._element.append(hyperlink)
-                break
+def extract_word_text(docx_path):
+    """Extract text from a Word document."""
+    doc = Document(docx_path)
+    text = ""
+    for para in doc.paragraphs:
+        text += para.text + "\n"
+    return text
 
-    doc.save(output_path)
+def find_word_positions(word, text):
+    """Find all positions of a word in text."""
+    positions = []
+    pattern = r'\b' + re.escape(word) + r'\b'
+    for match in re.finditer(pattern, text):
+        positions.append(match.start())
+    return positions
 
-    from docx import Document
-from docx.oxml.shared import OxmlElement
-from docx.oxml.ns import qn
-
-def add_hyperlink_to_word(word_path, matches, output_path):
-    doc = Document(word_path)
-    for match in matches:
-        para_idx = match["word_location"]["paragraph"]
-        offset = match["word_location"]["offset"]
-        text = match["word_text"]
-
-        # Find the paragraph and run containing the word
-        paragraph = doc.paragraphs[para_idx]
-        for run in paragraph.runs:
-            if text in run.text:
-                # Add a hyperlink to the word
-                hyperlink = OxmlElement("w:hyperlink")
-                hyperlink.set(qn("r:id"), f"mismatch_{match['pdf_location']['page']}")
-                run._element.append(hyperlink)
-                break
-
-    doc.save(output_path)
-
-
-
-word_path = "example.docx"
-pdf_path = "example.pdf"
-output_path = "linked_example.docx"
-
-def link_word_to_pdf(word_path, pdf_path, output_path):
-    # Step 1: Extract data from Word
-    word_data = extract_word_text_and_positions(word_path)
-
-    # Step 2: Extract data from PDF
-    pdf_data = extract_pdf_text_and_positions(pdf_path)
-
-    # Step 3: Match words
-    matches = match_words(word_data, pdf_data)
-
-    # Step 4: Add hyperlinks to Word
-    add_hyperlink_to_word(word_path, matches, output_path)
-
-    print(f"Linked Word document saved to {output_path}")
+def add_hyperlink(paragraph, text, url):
+    """Add a hyperlink to a paragraph."""
+    part = paragraph.part
+    r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
     
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), r_id)
+    
+    new_run = OxmlElement('w:r')
+    rPr = OxmlElement('w:rPr')
+    
+    # Add styling (optional)
+    color = OxmlElement('w:color')
+    color.set(qn('w:val'), '0000FF')  # Blue color
+    rPr.append(color)
+    
+    u = OxmlElement('w:u')
+    u.set(qn('w:val'), 'single')  # Single underline
+    rPr.append(u)
+    
+    new_run.append(rPr)
+    new_run.text = text
+    hyperlink.append(new_run)
+    paragraph._p.append(hyperlink)
+    
+    return hyperlink
 
-link_word_to_pdf(word_path, pdf_path, output_path)
+def create_word_links_to_pdf(word_path, pdf_path, output_word_path, target_words):
+    """Create links in Word document to PDF for specific words."""
+    # Extract text from PDF to find word positions
+    pdf_text = extract_pdf_text(pdf_path)
+    
+    # Create a new Word document based on the original
+    doc = Document(word_path)
+    
+    # PDF file path (for creating links)
+    pdf_abs_path = os.path.abspath(pdf_path)
+    
+    # Process each paragraph in Word
+    for para in doc.paragraphs:
+        for word in target_words:
+            if word in para.text:
+                # Find positions in PDF
+                pdf_positions = find_word_positions(word, pdf_text)
+                if pdf_positions:
+                    # Create link to first occurrence in PDF
+                    # Format: file:///path/to/file.pdf#page=X&search=word
+                    # Note: You might need to calculate the actual page number
+                    link_url = f"file:///{pdf_abs_path}#search={word}"
+                    
+                    # Create a new paragraph with the link
+                    new_para = doc.add_paragraph()
+                    add_hyperlink(new_para, f"Link to '{word}' in PDF", link_url)
+    
+    # Save the modified document
+    doc.save(output_word_path)
+
+# Example usage
+word_path = "document.docx"
+pdf_path = "document.pdf"
+output_word_path = "linked_document.docx"
+target_words = ["important", "keyword", "reference"]
+
+create_word_links_to_pdf(word_path, pdf_path, output_word_path, target_words)

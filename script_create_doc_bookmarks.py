@@ -4,6 +4,14 @@ import win32com.client
 from win32com.client import constants
 import re
 
+# Constants for Microsoft Word (WdUnits)
+wdStory = 6         # Used with HomeKey to move to beginning of document
+wdCharacter = 1     # Used with MoveRight to move by character
+
+# Constants for Information method
+wdActiveEndAdjustedPageNumber = 1   # Gets current page number
+wdFirstCharacterColumnNumber = 11 
+
 def create_word_bookmarks(docx_path, target_words):
     """
     Creates bookmarks at all occurrences of the specified words in a Word document
